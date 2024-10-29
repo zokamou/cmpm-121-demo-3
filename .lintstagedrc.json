@@ -1,0 +1,6 @@
+{
+    "*": [
+        "deno lint",
+        "deno fmt"
+    ]
+}
