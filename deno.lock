@@ -1,6 +1,9 @@
 {
   "version": "4",
   "specifiers": {
+    "npm:geojson@0.5": "0.5.0",
+    "npm:leaflet@^1.9.4": "1.9.4",
+    "npm:murmur-32@1": "1.0.0",
     "npm:vite@*": "5.4.8"
   },
   "npm": {
@@ -124,6 +127,9 @@
     "@types/estree@1.0.6": {
       "integrity": "sha512-AYnb1nQyY49te+VRAVgmzfcgjYS91mY5P0TKUDCLEM+gNnA+3T6rWITXRLYCpahpqSQbN5cE+gHpnPyXjHWxcw=="
     },
+    "encode-utf8@2.0.0": {
+      "integrity": "sha512-3EyMFxZj1/7oMotElDQUEQcP7N4TIe1aJ0m1uBDoyQ8I2LBHhBsXx8P3KsPbqNlGzG+NYxFwEauUwMPHZg3YDQ=="
+    },
     "esbuild@0.21.5": {
       "integrity": "sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==",
       "dependencies": [
@@ -152,8 +158,24 @@
         "@esbuild/win32-x64"
       ]
     },
+    "fmix@1.0.0": {
+      "integrity": "sha512-PIaqOGvVH5P+R92Ywy5PumsNEHvondVQh42SGOmkA9A0ZTFbfguzZpjZ/Gy3WVRUqT9Ia8k5tWlJeiZQzRHA7g=="
+    },
     "fsevents@2.3.3": {
       "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="
+    },
+    "geojson@0.5.0": {
+      "integrity": "sha512-/Bx5lEn+qRF4TfQ5aLu6NH+UKtvIv7Lhc487y/c8BdludrCTpiWf9wyI0RTyqg49MFefIAvFDuEi5Dfd/zgNxQ=="
+    },
+    "leaflet@1.9.4": {
+      "integrity": "sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA=="
+    },
+    "murmur-32@1.0.0": {
+      "integrity": "sha512-l6QKUGWXzZWHash7lmZzycpIifOrnc3PeMaoFrMv90c+xqOyOSzJU0q2T/1d15MzAdEWTpCh1paC855APqt1Gw==",
+      "dependencies": [
+        "encode-utf8",
+        "fmix"
+      ]
     },
     "nanoid@3.3.7": {
       "integrity": "sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g=="
@@ -204,5 +226,12 @@
         "rollup"
       ]
     }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:geojson@0.5",
+      "npm:leaflet@^1.9.4",
+      "npm:murmur-32@1"
+    ]
   }
 }
