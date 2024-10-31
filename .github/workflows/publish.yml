@@ -16,6 +16,8 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Check types
+        run: deno check src/
       - name: Check format
         run: deno fmt --check src/
       - name: Check lint
