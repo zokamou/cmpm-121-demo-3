@@ -4,19 +4,18 @@ import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 import { Board } from "./board.ts";
 
-const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
-
+const OAKES_CLASSROOM = { i: 369894, j: -1220627 };
 const GAMEPLAY_ZOOM_LEVEL = 19;
-const TILE_DEGREES = .0001;
+const TILE_DEGREES = 0.0001;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 const caches: { [cacheId: string]: Geocache } = {};
-let collectedCoins: string[] = [];
+const collectedCoins: string[] = [];
 
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 
-// Momento interface
+// Momento Geocache interface --------------------------------------------------------
 interface Momento<T> {
   toMomento(): T;
   fromMomento(momento: T): void;
@@ -42,12 +41,14 @@ class Geocache implements Momento<string> {
   }
 }
 
+// icons --------------------------------------------------------
+
 const customIcon = leaflet.icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/14307/14307428.png",
   iconSize: [42, 42],
   iconAnchor: [16, 32],
   popupAnchor: [0, -32],
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png", // Default Leaflet shadow image
+  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
   shadowSize: [41, 41],
   shadowAnchor: [8, 30],
 });
@@ -63,15 +64,17 @@ const currentLocation = leaflet.icon({
   shadowAnchor: [12, 26],
 });
 
-// create map
+// create map --------------------------------------------------------
 const mapContainer = document.createElement("div");
 mapContainer.style.width = "100%";
 mapContainer.style.height = "500px";
 document.body.appendChild(mapContainer);
 
-// create grid
 const map = leaflet.map(mapContainer, {
-  center: OAKES_CLASSROOM,
+  center: leaflet.latLng(
+    OAKES_CLASSROOM.i * TILE_DEGREES,
+    OAKES_CLASSROOM.j * TILE_DEGREES,
+  ),
   zoom: GAMEPLAY_ZOOM_LEVEL,
   minZoom: GAMEPLAY_ZOOM_LEVEL,
   maxZoom: GAMEPLAY_ZOOM_LEVEL,
@@ -87,7 +90,24 @@ leaflet
   })
   .addTo(map);
 
-// create wallet
+// create movement buttons --------------------------------------------------------
+const up = document.createElement("button");
+document.body.appendChild(up);
+up.innerHTML = "⬆️";
+
+const down = document.createElement("button");
+document.body.appendChild(down);
+down.innerHTML = "⬇️";
+
+const left = document.createElement("button");
+document.body.appendChild(left);
+left.innerHTML = "⬅️";
+
+const right = document.createElement("button");
+document.body.appendChild(right);
+right.innerHTML = "➡️";
+
+// create wallet --------------------------------------------------------
 const walletPanel = document.createElement("div");
 document.body.appendChild(walletPanel);
 walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
@@ -101,21 +121,43 @@ function updateWalletUI() {
   walletPanel.innerHTML += `</ul>`;
 }
 
-// update available coins
-function updateCachePopup(
-  cacheId: number,
-  popupDiv: HTMLDivElement,
-  selectedCoinId: string,
-) {
-  const updatedCoinCount = caches[cacheId.toString()].coins.length;
-  popupDiv.querySelector("div")!.innerHTML =
-    `<div>Cache #${cacheId} now contains ${updatedCoinCount} coins:</div>`;
-  const coinDiv = document.createElement("div");
-  coinDiv.innerHTML = `<span>Coin ID: ${selectedCoinId}</span>`;
-  popupDiv.appendChild(coinDiv);
+// move the player and render caches based on location --------------------------------------------------------
+const playerPosition = { i: OAKES_CLASSROOM.i, j: OAKES_CLASSROOM.j };
+
+function movePlayer(deltaI: number, deltaJ: number) {
+  playerPosition.i += deltaI;
+  playerPosition.j += deltaJ;
+
+  playerMarker.setLatLng([
+    playerPosition.i * TILE_DEGREES,
+    playerPosition.j * TILE_DEGREES,
+  ]);
+
+  const playerLatLng = leaflet.latLng(
+    playerPosition.i * TILE_DEGREES,
+    playerPosition.j * TILE_DEGREES,
+  );
+
+  // check surrounding cells and only spawn more if they haven't been seen
+  const cellsToCheck = board.getCellsNearPoint(playerLatLng);
+
+  cellsToCheck.forEach((cell) => {
+    const cellKey = `${cell.i},${cell.j}`;
+
+    if (
+      !caches[cellKey] && luck(`${cell.i},${cell.j}`) < CACHE_SPAWN_PROBABILITY
+    ) {
+      spawnCache(cell.i, cell.j);
+    }
+  });
 }
 
-// initialize coin ids
+up.addEventListener("click", () => movePlayer(1, 0));
+down.addEventListener("click", () => movePlayer(-1, 0));
+left.addEventListener("click", () => movePlayer(0, -1));
+right.addEventListener("click", () => movePlayer(0, 1));
+
+// initialization --------------------------------------------------------
 function generateCoinIds(i: number, j: number, numCoins: number): string[] {
   return Array.from(
     { length: numCoins },
@@ -124,45 +166,45 @@ function generateCoinIds(i: number, j: number, numCoins: number): string[] {
 }
 
 // current location marker
-const playerMarker = leaflet.marker(OAKES_CLASSROOM, { icon: currentLocation });
+const playerMarker = leaflet.marker(
+  [OAKES_CLASSROOM.i * TILE_DEGREES, OAKES_CLASSROOM.j * TILE_DEGREES],
+  { icon: currentLocation },
+);
 playerMarker.bindTooltip("You are here!");
 playerMarker.addTo(map);
 
-// add caches to the map --------------------------------------------------------
+// spawn caches to the map --------------------------------------------------------
 function spawnCache(i: number, j: number) {
-  const lat = OAKES_CLASSROOM.lat + i * TILE_DEGREES;
-  const lng = OAKES_CLASSROOM.lng + j * TILE_DEGREES;
-
+  const lat = i * TILE_DEGREES;
+  const lng = j * TILE_DEGREES;
   const cacheLatLng = leaflet.latLng(lat, lng);
-  board.getCellForPoint(cacheLatLng);
+  board.getCellForPoint(cacheLatLng); // Mark cell as known
 
+  // make cache id
   const cacheId = Math.floor(luck([i, j, "coinCount"].toString()) * 1000000);
-  const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1; // 1-5 coins per cache
+  const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1;
   const coinIds = generateCoinIds(i, j, coinCount);
 
-  // create a new Geocache object and store it in the caches dictionary
-  const geocache = new Geocache(lat, lng, coinIds);
-  caches[cacheId.toString()] = geocache;
+  // make new geocache
+  const geocache = new Geocache(i, j, coinIds);
+  const cellKey = `${i},${j}`;
+  caches[cellKey] = geocache;
 
+  // create marker and its popup
   const marker = leaflet.marker([lat, lng], { icon: customIcon });
   marker.addTo(map);
 
-  // popup when clicking on cache --------------------------------------------------------
   marker.bindPopup(() => {
     const popupDiv = document.createElement("div");
-    popupDiv.innerHTML = `<div>Cache #${cacheId} contains ${
-      caches[cacheId.toString()].coins.length
-    } coins:</div>`;
+    popupDiv.innerHTML =
+      `<div>Cache #${cacheId} contains ${coinCount} coins:</div>`;
 
-    // show available coins --------------------------------------------------------
-    caches[cacheId.toString()].coins.forEach((coinId) => {
+    coinIds.forEach((coinId) => {
       const coinDiv = document.createElement("div");
       coinDiv.innerHTML = `
         <span>Coin ID: ${coinId}</span>
         <button class="collectButton" data-coin-id="${coinId}">Collect</button>`;
       popupDiv.appendChild(coinDiv);
-
-      // collect coins
       coinDiv.querySelector("button")!.addEventListener("click", (event) => {
         const coinId = (event.target as HTMLButtonElement).getAttribute(
           "data-coin-id",
@@ -170,8 +212,6 @@ function spawnCache(i: number, j: number) {
         if (coinId) {
           collectedCoins.push(coinId);
           updateWalletUI();
-          // update the Geocache object, not just the array
-          const geocache = caches[cacheId.toString()];
           geocache.coins = geocache.coins.filter((id) => id !== coinId);
           coinDiv.querySelector("button")!.disabled = true;
           coinDiv.querySelector("button")!.innerHTML = "Collected";
@@ -179,62 +219,21 @@ function spawnCache(i: number, j: number) {
       });
     });
 
-    // dropdown menu -----------------------------------------------
-    const depositDiv = document.createElement("div");
-    depositDiv.innerHTML = `
-      <label for="coinSelect">Select coin to deposit:</label>
-      <select id="coinSelect">
-        <option value="">-- Select a Coin --</option>
-        ${
-      collectedCoins.map((coinId) =>
-        `<option value="${coinId}">${coinId}</option>`
-      ).join("")
-    }
-      </select>
-      <button id="depositButton" disabled>Deposit</button>
-    `;
-    popupDiv.appendChild(depositDiv);
-
-    const coinSelect = depositDiv.querySelector(
-      "#coinSelect",
-    ) as HTMLSelectElement;
-    const depositButton = depositDiv.querySelector(
-      "#depositButton",
-    ) as HTMLButtonElement;
-
-    coinSelect.addEventListener("change", (event) => {
-      const selectedCoinId = (event.target as HTMLSelectElement).value;
-      depositButton.disabled = !selectedCoinId;
-    });
-
-    // actually make a deposit ----------
-    depositButton.addEventListener("click", () => {
-      const selectedCoinId = coinSelect.value;
-
-      // add a coin to cache and remove from wallet
-      if (selectedCoinId) {
-        caches[cacheId.toString()].coins.push(selectedCoinId);
-        collectedCoins = collectedCoins.filter((coin) =>
-          coin !== selectedCoinId
-        );
-        updateWalletUI();
-        updateCachePopup(cacheId, popupDiv, selectedCoinId);
-
-        // update the cache with the new coin state
-        caches[cacheId.toString()].fromMomento(
-          caches[cacheId.toString()].toMomento(),
-        );
-      }
-    });
-
     return popupDiv;
   });
 }
 
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(i, j);
+// initial spawn --------------------------------------------------------
+board.getCellsNearPoint(
+  leaflet.latLng(
+    OAKES_CLASSROOM.i * TILE_DEGREES,
+    OAKES_CLASSROOM.j * TILE_DEGREES,
+  ),
+)
+  .forEach((cell) => {
+    const lat = cell.i * TILE_DEGREES;
+    const lng = cell.j * TILE_DEGREES;
+    if (luck([lat, lng].toString()) < CACHE_SPAWN_PROBABILITY) {
+      spawnCache(cell.i, cell.j);
     }
-  }
-}
+  });

@@ -21,19 +21,18 @@ export class Board {
     const { i, j } = cell;
     const key = [i, j].toString();
 
+    // check if cell is known if not add it
     if (!this.knownCells.has(key)) {
       this.knownCells.set(key, cell);
     }
-
     return this.knownCells.get(key)!;
   }
 
   getCellForPoint(point: leaflet.LatLng): Cell {
     const i = Math.floor(point.lat / this.tileWidth);
     const j = Math.floor(point.lng / this.tileWidth);
-
-    // Create and canonicalize the cell
     const cell: Cell = { i, j };
+
     return this.getCanonicalCell(cell);
   }
 
