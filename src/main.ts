@@ -11,7 +11,7 @@ const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 const caches: { [cacheId: string]: Geocache } = {};
-const collectedCoins: string[] = [];
+let collectedCoins: string[] = [];
 
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 
@@ -165,6 +165,31 @@ function generateCoinIds(i: number, j: number, numCoins: number): string[] {
   );
 }
 
+// update available coins
+function updateCachePopupCollect(
+  cacheId: string,
+  popupDiv: HTMLDivElement,
+) {
+  const updatedCoinCount = caches[cacheId.toString()].coins.length;
+  popupDiv.querySelector("div")!.innerHTML =
+    `<div>Cache #${cacheId} now contains ${updatedCoinCount - 1} coins:</div>`;
+}
+
+function updateCachePopupDeposit(
+  cacheId: string,
+  popupDiv: HTMLDivElement,
+  selectedCoinId: string,
+) {
+  console.log("hihi");
+
+  const updatedCoinCount = caches[cacheId.toString()].coins.length;
+  popupDiv.querySelector("div")!.innerHTML =
+    `<div>Cache #${cacheId} now contains ${updatedCoinCount} coins:</div>`;
+  const coinDiv = document.createElement("div");
+  coinDiv.innerHTML = `<span>Coin ID: ${selectedCoinId}</span>`;
+  popupDiv.appendChild(coinDiv);
+}
+
 // current location marker
 const playerMarker = leaflet.marker(
   [OAKES_CLASSROOM.i * TILE_DEGREES, OAKES_CLASSROOM.j * TILE_DEGREES],
@@ -180,31 +205,83 @@ function spawnCache(i: number, j: number) {
   const cacheLatLng = leaflet.latLng(lat, lng);
   board.getCellForPoint(cacheLatLng); // Mark cell as known
 
-  // make cache id
-  const cacheId = Math.floor(luck([i, j, "coinCount"].toString()) * 1000000);
+  // Create a unique cache ID and coins for the cache
+  //const cacheId = Math.floor(luck([i, j, "coinCount"].toString()) * 1000000);
   const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1;
   const coinIds = generateCoinIds(i, j, coinCount);
 
-  // make new geocache
+  // Create a new Geocache object and store it in the caches dictionary
   const geocache = new Geocache(i, j, coinIds);
   const cellKey = `${i},${j}`;
   caches[cellKey] = geocache;
 
-  // create marker and its popup
+  // Create a marker for the geocache
   const marker = leaflet.marker([lat, lng], { icon: customIcon });
   marker.addTo(map);
 
+  // Bind the popup to the marker, not the Geocache object
   marker.bindPopup(() => {
     const popupDiv = document.createElement("div");
-    popupDiv.innerHTML =
-      `<div>Cache #${cacheId} contains ${coinCount} coins:</div>`;
+    popupDiv.id = "popup";
+    popupDiv.innerHTML = `<div>Cache #${cellKey} contains ${
+      caches[cellKey].coins.length
+    } coins:</div>`;
 
-    coinIds.forEach((coinId) => {
+    // Deposit coin dropdown menu
+    const depositDiv = document.createElement("div");
+    depositDiv.innerHTML = `
+      <label for="coinSelect">Select coin to deposit:</label>
+      <select id="coinSelect">
+        <option value="">-- Select a Coin --</option>
+        ${
+      collectedCoins.map((coinId) =>
+        `<option value="${coinId}">${coinId}</option>`
+      ).join("")
+    }
+      </select>
+      <button id="depositButton" disabled>Deposit</button>
+    `;
+    popupDiv.appendChild(depositDiv);
+
+    const coinSelect = depositDiv.querySelector(
+      "#coinSelect",
+    ) as HTMLSelectElement;
+    const depositButton = depositDiv.querySelector(
+      "#depositButton",
+    ) as HTMLButtonElement;
+
+    coinSelect.addEventListener("change", (event) => {
+      const selectedCoinId = (event.target as HTMLSelectElement).value;
+      depositButton.disabled = !selectedCoinId;
+    });
+
+    // Handle coin deposit
+    depositButton.addEventListener("click", () => {
+      const selectedCoinId = coinSelect.value;
+
+      // Deposit the coin into the cache and update state
+      if (selectedCoinId) {
+        geocache.coins.push(selectedCoinId);
+        collectedCoins = collectedCoins.filter((coin) =>
+          coin !== selectedCoinId
+        );
+        updateWalletUI();
+        updateCachePopupDeposit(cellKey, popupDiv, selectedCoinId);
+
+        // Save the state of the cache (if using Memento)
+        caches[cellKey].fromMomento(caches[cellKey].toMomento());
+      }
+    });
+
+    // Display available coins with collection functionality
+    caches[cellKey].coins.forEach((coinId) => {
       const coinDiv = document.createElement("div");
       coinDiv.innerHTML = `
-        <span>Coin ID: ${coinId}</span>
-        <button class="collectButton" data-coin-id="${coinId}">Collect</button>`;
+            <span>Coin ID: ${coinId}</span>
+            <button class="collectButton" data-coin-id="${coinId}">Collect</button>`;
       popupDiv.appendChild(coinDiv);
+
+      // Handle coin collection
       coinDiv.querySelector("button")!.addEventListener("click", (event) => {
         const coinId = (event.target as HTMLButtonElement).getAttribute(
           "data-coin-id",
@@ -212,6 +289,9 @@ function spawnCache(i: number, j: number) {
         if (coinId) {
           collectedCoins.push(coinId);
           updateWalletUI();
+          updateCachePopupCollect(cellKey, popupDiv);
+
+          // Update the Geocache object state
           geocache.coins = geocache.coins.filter((id) => id !== coinId);
           coinDiv.querySelector("button")!.disabled = true;
           coinDiv.querySelector("button")!.innerHTML = "Collected";
