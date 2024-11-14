@@ -116,10 +116,10 @@ function updateCachePopup(
 }
 
 // initialize coin ids
-function generateCoinIds(cacheId: number, numCoins: number): string[] {
+function generateCoinIds(i: number, j: number, numCoins: number): string[] {
   return Array.from(
     { length: numCoins },
-    (_, index) => `coin-${cacheId}-${index}`,
+    (_, index) => `coin-${i}:${j}#${index}`,
   );
 }
 
@@ -138,7 +138,7 @@ function spawnCache(i: number, j: number) {
 
   const cacheId = Math.floor(luck([i, j, "coinCount"].toString()) * 1000000);
   const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1; // 1-5 coins per cache
-  const coinIds = generateCoinIds(cacheId, coinCount);
+  const coinIds = generateCoinIds(i, j, coinCount);
 
   // create a new Geocache object and store it in the caches dictionary
   const geocache = new Geocache(lat, lng, coinIds);
