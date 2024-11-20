@@ -12,8 +12,8 @@ const CACHE_SPAWN_PROBABILITY = 0.1;
 
 let caches: { [cacheId: string]: Geocache } = {};
 let collectedCoins: string[] = [];
-
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+const playerPosition = { i: OAKES_CLASSROOM.i, j: OAKES_CLASSROOM.j };
 
 // Momento Geocache interface --------------------------------------------------------
 interface Momento<T> {
@@ -64,36 +64,9 @@ const currentLocation = leaflet.icon({
   shadowAnchor: [12, 26],
 });
 
-// create map --------------------------------------------------------
-const mapContainer = document.createElement("div");
-mapContainer.style.width = "100%";
-mapContainer.style.height = "500px";
-document.body.appendChild(mapContainer);
+// functions -----------------------------------------------------------------------------------------
 
-const map = leaflet.map(mapContainer, {
-  center: leaflet.latLng(
-    OAKES_CLASSROOM.i * TILE_DEGREES,
-    OAKES_CLASSROOM.j * TILE_DEGREES,
-  ),
-  zoom: GAMEPLAY_ZOOM_LEVEL,
-  minZoom: GAMEPLAY_ZOOM_LEVEL,
-  maxZoom: GAMEPLAY_ZOOM_LEVEL,
-  zoomControl: false,
-  scrollWheelZoom: false,
-});
-
-const playerPath: leaflet.Polyline = leaflet.polyline([], { color: "blue" })
-  .addTo(map);
-
-leaflet
-  .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution:
-      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  })
-  .addTo(map);
-
-// location on game startup  -------------------------------------------------
+// location on game startup
 function initializePlayerLocation() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -129,56 +102,6 @@ function initializePlayerLocation() {
   }
 }
 
-initializePlayerLocation();
-
-// create movement buttons --------------------------------------------------------
-const up = document.createElement("button");
-document.body.appendChild(up);
-up.innerHTML = "⬆️";
-
-const down = document.createElement("button");
-document.body.appendChild(down);
-down.innerHTML = "⬇️";
-
-const left = document.createElement("button");
-document.body.appendChild(left);
-left.innerHTML = "⬅️";
-
-const right = document.createElement("button");
-document.body.appendChild(right);
-right.innerHTML = "➡️";
-
-// reset button -----------------------------------------------
-
-const resetButton = document.createElement("button");
-resetButton.id = "resetButton";
-resetButton.innerText = "Reset Game State 🚮";
-resetButton.style.margin = "10px";
-
-resetButton.addEventListener("click", () => {
-  if (
-    confirm(
-      "Are you sure you want to reset the game data? This action cannot be undone.",
-    )
-  ) {
-    localStorage.clear();
-    alert("Game data has been reset.");
-    location.reload();
-  }
-});
-
-const container = document.getElementById("buttonContainer");
-if (container) {
-  container.appendChild(resetButton);
-} else {
-  document.body.appendChild(resetButton);
-}
-
-// create wallet --------------------------------------------------------
-const walletPanel = document.createElement("div");
-document.body.appendChild(walletPanel);
-walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
-
 // update coins in wallet
 function updateWalletUI() {
   walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
@@ -188,9 +111,7 @@ function updateWalletUI() {
   walletPanel.innerHTML += `</ul>`;
 }
 
-// move the player and render caches based on location --------------------------------------------------------
-const playerPosition = { i: OAKES_CLASSROOM.i, j: OAKES_CLASSROOM.j };
-
+// move player by arrows or sensor
 function movePlayer(deltaI: number, deltaJ: number) {
   playerPosition.i += deltaI;
   playerPosition.j += deltaJ;
@@ -220,16 +141,7 @@ function movePlayer(deltaI: number, deltaJ: number) {
   });
 }
 
-// toggle button to switch between arrors/sensor -------------------------------------------------
-const toggleButton = document.createElement("button");
-toggleButton.id = "toggleButton";
-toggleButton.innerText = "Switch to Sensor Movement";
-toggleButton.style.margin = "10px";
-document.body.appendChild(toggleButton);
-
-let isSensorMode = false;
-let watchId: number | null = null;
-
+// functions to switch to sensor location
 function startSensorMode() {
   if (navigator.geolocation) {
     watchId = navigator.geolocation.watchPosition(
@@ -260,57 +172,7 @@ function stopSensorMode() {
   }
 }
 
-// go back to arrow mode
-toggleButton.addEventListener("click", () => {
-  isSensorMode = !isSensorMode;
-
-  if (isSensorMode) {
-    toggleButton.innerText = "Switch to Arrow Movement";
-    up.disabled = true;
-    down.disabled = true;
-    left.disabled = true;
-    right.disabled = true;
-    startSensorMode();
-  } else {
-    toggleButton.innerText = "Switch to Sensor Movement";
-    up.disabled = false;
-    down.disabled = false;
-    left.disabled = false;
-    right.disabled = false;
-    stopSensorMode();
-  }
-});
-
-up.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(1, 0);
-});
-down.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(-1, 0);
-});
-left.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(0, -1);
-});
-right.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(0, 1);
-});
-
-// initialization --------------------------------------------------------
-function generateCoinIds(i: number, j: number, numCoins: number): string[] {
-  return Array.from(
-    { length: numCoins },
-    (_, index) => `coin-${i}:${j}#${index}`,
-  );
-}
-
-// current location marker
-const playerMarker = leaflet.marker(
-  [OAKES_CLASSROOM.i * TILE_DEGREES, OAKES_CLASSROOM.j * TILE_DEGREES],
-  { icon: currentLocation },
-);
-playerMarker.bindTooltip("You are here!");
-playerMarker.addTo(map);
-
-// updating local storage ------------------------------------------------
+// updating local storage
 function updateLocalCaches(cacheList: { [cacheId: string]: Geocache }) {
   localStorage.setItem("caches", JSON.stringify(cacheList));
   console.log(cacheList);
@@ -320,7 +182,7 @@ function updateLocalCoins(coinList: string[]) {
   localStorage.setItem("coins", JSON.stringify(coinList));
 }
 
-// initializing game state from local storage -----------------------------------
+// initializing game state from local storage
 function loadGameState() {
   const getLocalCaches = localStorage.getItem("caches");
   const getLocalCoins = localStorage.getItem("coins");
@@ -354,7 +216,14 @@ function loadGameState() {
   updateWalletUI();
 }
 
-// update available coins --------------------------------------------------------
+function generateCoinIds(i: number, j: number, numCoins: number): string[] {
+  return Array.from(
+    { length: numCoins },
+    (_, index) => `coin-${i}:${j}#${index}`,
+  );
+}
+
+// update available coins
 function updateCachePopupCollect(
   cacheId: string,
   popupDiv: HTMLDivElement,
@@ -379,8 +248,7 @@ function updateCachePopupDeposit(
   popupDiv.appendChild(coinDiv);
 }
 
-// spawn caches to the map --------------------------------------------------------
-
+// spawn caches to the map
 function createMarker(i: number, j: number) {
   const lat = i * TILE_DEGREES;
   const lng = j * TILE_DEGREES;
@@ -512,4 +380,134 @@ function spawnExistingCache(cellKey: string, geocache: Geocache) {
   handleMarkerClick(marker, geocache, cellKey);
 }
 
+// create map ----------------------------------------------------------------------------------
+const mapContainer = document.createElement("div");
+mapContainer.style.width = "100%";
+mapContainer.style.height = "500px";
+document.body.appendChild(mapContainer);
+
+const map = leaflet.map(mapContainer, {
+  center: leaflet.latLng(
+    OAKES_CLASSROOM.i * TILE_DEGREES,
+    OAKES_CLASSROOM.j * TILE_DEGREES,
+  ),
+  zoom: GAMEPLAY_ZOOM_LEVEL,
+  minZoom: GAMEPLAY_ZOOM_LEVEL,
+  maxZoom: GAMEPLAY_ZOOM_LEVEL,
+  zoomControl: false,
+  scrollWheelZoom: false,
+});
+
+const playerPath: leaflet.Polyline = leaflet.polyline([], { color: "blue" })
+  .addTo(map);
+
+leaflet
+  .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  })
+  .addTo(map);
+
+// current location marker
+const playerMarker = leaflet.marker(
+  [OAKES_CLASSROOM.i * TILE_DEGREES, OAKES_CLASSROOM.j * TILE_DEGREES],
+  { icon: currentLocation },
+);
+playerMarker.bindTooltip("You are here!");
+playerMarker.addTo(map);
+
+// create movement buttons --------------------------------------------------------
+const up = document.createElement("button");
+document.body.appendChild(up);
+up.innerHTML = "⬆️";
+
+const down = document.createElement("button");
+document.body.appendChild(down);
+down.innerHTML = "⬇️";
+
+const left = document.createElement("button");
+document.body.appendChild(left);
+left.innerHTML = "⬅️";
+
+const right = document.createElement("button");
+document.body.appendChild(right);
+right.innerHTML = "➡️";
+
+// reset button -----------------------------------------------
+const resetButton = document.createElement("button");
+resetButton.id = "resetButton";
+resetButton.innerText = "Reset Game State 🚮";
+resetButton.style.margin = "10px";
+
+resetButton.addEventListener("click", () => {
+  if (
+    confirm(
+      "Are you sure you want to reset the game data? This action cannot be undone.",
+    )
+  ) {
+    localStorage.clear();
+    alert("Game data has been reset.");
+    location.reload();
+  }
+});
+
+const container = document.getElementById("buttonContainer");
+if (container) {
+  container.appendChild(resetButton);
+} else {
+  document.body.appendChild(resetButton);
+}
+
+// create wallet --------------------------------------------------------------------
+const walletPanel = document.createElement("div");
+document.body.appendChild(walletPanel);
+walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
+
+// toggle button to switch between arrors/sensor -------------------------------------------------
+const toggleButton = document.createElement("button");
+toggleButton.id = "toggleButton";
+toggleButton.innerText = "Switch to Sensor Movement";
+toggleButton.style.margin = "10px";
+document.body.appendChild(toggleButton);
+
+let isSensorMode = false;
+let watchId: number | null = null;
+
+// go back to arrow mode
+toggleButton.addEventListener("click", () => {
+  isSensorMode = !isSensorMode;
+
+  if (isSensorMode) {
+    toggleButton.innerText = "Switch to Arrow Movement";
+    up.disabled = true;
+    down.disabled = true;
+    left.disabled = true;
+    right.disabled = true;
+    startSensorMode();
+  } else {
+    toggleButton.innerText = "Switch to Sensor Movement";
+    up.disabled = false;
+    down.disabled = false;
+    left.disabled = false;
+    right.disabled = false;
+    stopSensorMode();
+  }
+});
+
+up.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(1, 0);
+});
+down.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(-1, 0);
+});
+left.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(0, -1);
+});
+right.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(0, 1);
+});
+
+// initialization -----------------------------------------------------------
+initializePlayerLocation();
 loadGameState();
