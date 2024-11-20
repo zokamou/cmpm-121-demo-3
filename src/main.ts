@@ -54,14 +54,13 @@ const customIcon = leaflet.icon({
 });
 
 const currentLocation = leaflet.icon({
-  iconUrl:
-    "https://static-00.iconduck.com/assets.00/map-marker-icon-342x512-gd1hf1rz.png",
-  iconSize: [34, 48],
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/418/418344.png",
+  iconSize: [48, 48],
   iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
+  popupAnchor: [0, -24],
   shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
   shadowSize: [41, 41],
-  shadowAnchor: [12, 26],
+  shadowAnchor: [5, 24],
 });
 
 // functions -----------------------------------------------------------------------------------------
@@ -80,6 +79,7 @@ function initializePlayerLocation() {
 
         playerMarker.setLatLng(startLatLng);
         map.setView(startLatLng, GAMEPLAY_ZOOM_LEVEL);
+        loadGameState();
       },
       (error) => {
         console.error("Geolocation failed, using default location:", error);
@@ -91,6 +91,7 @@ function initializePlayerLocation() {
         map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
       },
     );
+
     // go back to oakes if location cannot be found
   } else {
     alert("Geolocation is not supported by your browser.");
@@ -104,11 +105,44 @@ function initializePlayerLocation() {
 
 // update coins in wallet
 function updateWalletUI() {
-  walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
+  walletPanel.innerHTML = `<div>Collected Coins:</div>`;
+  const walletList = document.createElement("ul");
+
   collectedCoins.forEach((coinId) => {
-    walletPanel.innerHTML += `<li>${coinId}</li>`;
+    const li = document.createElement("li");
+    li.textContent = coinId;
+
+    // Add "Pan to Cache" button
+    const panButton = document.createElement("button");
+    panButton.textContent = "Pan to Cache";
+    panButton.style.marginLeft = "10px";
+    panButton.addEventListener("click", () => {
+      console.log(`Pan button clicked for coin ${coinId}`); // Debugging log
+
+      // Extract grid coordinates from coinId
+      const matches = coinId.match(/^coin-([-0-9]+):([-0-9]+)#/);
+      if (matches) {
+        const cacheI = parseInt(matches[1], 10);
+        const cacheJ = parseInt(matches[2], 10);
+        console.log(`Parsed coordinates: i=${cacheI}, j=${cacheJ}`); // Debugging log
+
+        const latLng = leaflet.latLng(
+          cacheI * TILE_DEGREES,
+          cacheJ * TILE_DEGREES,
+        );
+        console.log(`Panning to LatLng: ${latLng}`); // Debugging log
+
+        map.setView(latLng, GAMEPLAY_ZOOM_LEVEL);
+      } else {
+        console.error(`Invalid coinId format: ${coinId}`);
+      }
+    });
+
+    li.appendChild(panButton);
+    walletList.appendChild(li);
   });
-  walletPanel.innerHTML += `</ul>`;
+
+  walletPanel.appendChild(walletList);
 }
 
 // move player by arrows or sensor
@@ -197,8 +231,8 @@ function loadGameState() {
   } else {
     board.getCellsNearPoint(
       leaflet.latLng(
-        OAKES_CLASSROOM.i * TILE_DEGREES,
-        OAKES_CLASSROOM.j * TILE_DEGREES,
+        playerPosition.i * TILE_DEGREES,
+        playerPosition.j * TILE_DEGREES,
       ),
     )
       .forEach((cell) => {
@@ -388,8 +422,8 @@ document.body.appendChild(mapContainer);
 
 const map = leaflet.map(mapContainer, {
   center: leaflet.latLng(
-    OAKES_CLASSROOM.i * TILE_DEGREES,
-    OAKES_CLASSROOM.j * TILE_DEGREES,
+    playerPosition.i * TILE_DEGREES,
+    playerPosition.j * TILE_DEGREES,
   ),
   zoom: GAMEPLAY_ZOOM_LEVEL,
   minZoom: GAMEPLAY_ZOOM_LEVEL,
@@ -411,7 +445,7 @@ leaflet
 
 // current location marker
 const playerMarker = leaflet.marker(
-  [OAKES_CLASSROOM.i * TILE_DEGREES, OAKES_CLASSROOM.j * TILE_DEGREES],
+  [playerPosition.i * TILE_DEGREES, playerPosition.j * TILE_DEGREES],
   { icon: currentLocation },
 );
 playerMarker.bindTooltip("You are here!");
@@ -449,6 +483,7 @@ resetButton.addEventListener("click", () => {
     localStorage.clear();
     alert("Game data has been reset.");
     location.reload();
+    movePlayer(0, 0);
   }
 });
 
@@ -459,10 +494,18 @@ if (container) {
   document.body.appendChild(resetButton);
 }
 
-// create wallet --------------------------------------------------------------------
-const walletPanel = document.createElement("div");
-document.body.appendChild(walletPanel);
-walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
+// recenter button -----------------------------------------------------
+const recenterButton = document.createElement("button");
+recenterButton.textContent = "Recenter to Player";
+recenterButton.style.margin = "10px";
+recenterButton.addEventListener("click", () => {
+  const playerLatLng = leaflet.latLng(
+    playerPosition.i * TILE_DEGREES,
+    playerPosition.j * TILE_DEGREES,
+  );
+  map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
+});
+document.body.appendChild(recenterButton);
 
 // toggle button to switch between arrors/sensor -------------------------------------------------
 const toggleButton = document.createElement("button");
@@ -508,6 +551,10 @@ right.addEventListener("click", () => {
   if (!isSensorMode) movePlayer(0, 1);
 });
 
+// create wallet --------------------------------------------------------------------
+const walletPanel = document.createElement("div");
+document.body.appendChild(walletPanel);
+walletPanel.innerHTML = `<div>Collected Coins:</div><ul>`;
+
 // initialization -----------------------------------------------------------
 initializePlayerLocation();
-loadGameState();
