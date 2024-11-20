@@ -10,7 +10,7 @@ const TILE_DEGREES = 0.0001;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
-const caches: { [cacheId: string]: Geocache } = {};
+let caches: { [cacheId: string]: Geocache } = {};
 let collectedCoins: string[] = [];
 
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
@@ -107,6 +107,32 @@ const right = document.createElement("button");
 document.body.appendChild(right);
 right.innerHTML = "➡️";
 
+// reset button -----------------------------------------------
+
+const resetButton = document.createElement("button");
+resetButton.id = "resetButton";
+resetButton.innerText = "Reset Local Storage";
+resetButton.style.margin = "10px";
+
+resetButton.addEventListener("click", () => {
+  if (
+    confirm(
+      "Are you sure you want to reset the game data? This action cannot be undone.",
+    )
+  ) {
+    localStorage.clear();
+    alert("Game data has been reset.");
+    location.reload();
+  }
+});
+
+const container = document.getElementById("buttonContainer");
+if (container) {
+  container.appendChild(resetButton);
+} else {
+  document.body.appendChild(resetButton);
+}
+
 // create wallet --------------------------------------------------------
 const walletPanel = document.createElement("div");
 document.body.appendChild(walletPanel);
@@ -175,6 +201,50 @@ const playerMarker = leaflet.marker(
 playerMarker.bindTooltip("You are here!");
 playerMarker.addTo(map);
 
+// updating local storage ------------------------------------------------
+function updateLocalCaches(cacheList: { [cacheId: string]: Geocache }) {
+  localStorage.setItem("caches", JSON.stringify(cacheList));
+  console.log(cacheList);
+}
+
+function updateLocalCoins(coinList: string[]) {
+  localStorage.setItem("coins", JSON.stringify(coinList));
+}
+
+// initializing game state from local storage -----------------------------------
+function loadGameState() {
+  const getLocalCaches = localStorage.getItem("caches");
+  const getLocalCoins = localStorage.getItem("coins");
+
+  if (getLocalCaches) {
+    caches = JSON.parse(getLocalCaches);
+    console.log(caches);
+    for (const cellKey of Object.keys(caches)) {
+      const geocacheData = caches[cellKey];
+      spawnExistingCache(cellKey, geocacheData);
+    }
+  } else {
+    board.getCellsNearPoint(
+      leaflet.latLng(
+        OAKES_CLASSROOM.i * TILE_DEGREES,
+        OAKES_CLASSROOM.j * TILE_DEGREES,
+      ),
+    )
+      .forEach((cell) => {
+        const lat = cell.i * TILE_DEGREES;
+        const lng = cell.j * TILE_DEGREES;
+        if (luck([lat, lng].toString()) < CACHE_SPAWN_PROBABILITY) {
+          spawnCache(cell.i, cell.j);
+        }
+      });
+  }
+  if (getLocalCoins) {
+    collectedCoins = JSON.parse(getLocalCoins);
+  }
+
+  updateWalletUI();
+}
+
 // update available coins --------------------------------------------------------
 function updateCachePopupCollect(
   cacheId: string,
@@ -201,112 +271,35 @@ function updateCachePopupDeposit(
 }
 
 // spawn caches to the map --------------------------------------------------------
-function spawnCache(i: number, j: number) {
+
+function createMarker(i: number, j: number) {
   const lat = i * TILE_DEGREES;
   const lng = j * TILE_DEGREES;
-  const cacheLatLng = leaflet.latLng(lat, lng);
-  board.getCellForPoint(cacheLatLng);
-
-  const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1;
-  const coinIds = generateCoinIds(i, j, coinCount);
-
-  // new geocache
-  const geocache = new Geocache(i, j, coinIds);
-  const cellKey = `${i},${j}`;
-  caches[cellKey] = geocache;
-
   const marker = leaflet.marker([lat, lng], { icon: customIcon });
   marker.addTo(map);
+  return marker;
+}
 
-  // click on marker
+function handleMarkerClick(
+  marker: leaflet.Marker,
+  geocache: Geocache,
+  cellKey: string,
+) {
+  const cacheLatLng = leaflet.latLng(
+    geocache.i * TILE_DEGREES,
+    geocache.j * TILE_DEGREES,
+  );
+
   marker.on("click", () => {
-    // check player distance from cache --------
     const playerLatLng = leaflet.latLng(
       playerPosition.i * TILE_DEGREES,
       playerPosition.j * TILE_DEGREES,
     );
     const distance = playerLatLng.distanceTo(cacheLatLng);
+
     if (distance <= 10) {
       marker.bindPopup(() => {
-        const popupDiv = document.createElement("div");
-        popupDiv.id = "popup";
-        popupDiv.innerHTML = `<div>Cache #${cellKey} contains ${
-          caches[cellKey].coins.length
-        } coins:</div>`;
-
-        // dropdown for deposit --------
-        const depositDiv = document.createElement("div");
-        depositDiv.innerHTML = `
-          <label for="coinSelect">Select coin to deposit:</label>
-          <select id="coinSelect">
-            <option value="">-- Select a Coin --</option>
-            ${
-          collectedCoins.map((coinId) =>
-            `<option value="${coinId}">${coinId}</option>`
-          ).join("")
-        }
-          </select>
-          <button id="depositButton" disabled>Deposit</button>
-        `;
-        popupDiv.appendChild(depositDiv);
-
-        const coinSelect = depositDiv.querySelector(
-          "#coinSelect",
-        ) as HTMLSelectElement;
-        const depositButton = depositDiv.querySelector(
-          "#depositButton",
-        ) as HTMLButtonElement;
-
-        coinSelect.addEventListener("change", (event) => {
-          const selectedCoinId = (event.target as HTMLSelectElement).value;
-          depositButton.disabled = !selectedCoinId;
-        });
-
-        // deposit button -----------
-        depositButton.addEventListener("click", () => {
-          const selectedCoinId = coinSelect.value;
-
-          if (selectedCoinId) {
-            geocache.coins.push(selectedCoinId);
-            collectedCoins = collectedCoins.filter((coin) =>
-              coin !== selectedCoinId
-            );
-            updateWalletUI();
-            updateCachePopupDeposit(cellKey, popupDiv, selectedCoinId);
-
-            caches[cellKey].fromMomento(caches[cellKey].toMomento());
-          }
-        });
-
-        // show coins ---------------
-        caches[cellKey].coins.forEach((coinId) => {
-          const coinDiv = document.createElement("div");
-          coinDiv.innerHTML = `
-                <span>Coin ID: ${coinId}</span>
-                <button class="collectButton" data-coin-id="${coinId}">Collect</button>`;
-          popupDiv.appendChild(coinDiv);
-
-          // collect coin button
-          coinDiv.querySelector("button")!.addEventListener(
-            "click",
-            (event) => {
-              const coinId = (event.target as HTMLButtonElement).getAttribute(
-                "data-coin-id",
-              );
-              if (coinId) {
-                collectedCoins.push(coinId);
-                updateWalletUI();
-                updateCachePopupCollect(cellKey, popupDiv);
-
-                // Update the Geocache object state
-                geocache.coins = geocache.coins.filter((id) => id !== coinId);
-                coinDiv.querySelector("button")!.disabled = true;
-                coinDiv.querySelector("button")!.innerHTML = "Collected";
-              }
-            },
-          );
-        });
-
+        const popupDiv = createCachePopup(geocache, cellKey);
         return popupDiv;
       });
     } else {
@@ -315,17 +308,99 @@ function spawnCache(i: number, j: number) {
   });
 }
 
-// initial spawn --------------------------------------------------------
-board.getCellsNearPoint(
-  leaflet.latLng(
-    OAKES_CLASSROOM.i * TILE_DEGREES,
-    OAKES_CLASSROOM.j * TILE_DEGREES,
-  ),
-)
-  .forEach((cell) => {
-    const lat = cell.i * TILE_DEGREES;
-    const lng = cell.j * TILE_DEGREES;
-    if (luck([lat, lng].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(cell.i, cell.j);
+function createCachePopup(geocache: Geocache, cellKey: string): HTMLDivElement {
+  const popupDiv = document.createElement("div");
+  popupDiv.id = "popup";
+  popupDiv.innerHTML =
+    `<div>Cache #${cellKey} contains ${geocache.coins.length} coins:</div>`;
+
+  // coin dropdown
+  const depositDiv = document.createElement("div");
+  depositDiv.innerHTML = `
+    <label for="coinSelect">Select coin to deposit:</label>
+    <select id="coinSelect">
+      <option value="">-- Select a Coin --</option>
+      ${
+    collectedCoins
+      .map((coinId) => `<option value="${coinId}">${coinId}</option>`)
+      .join("")
+  }
+    </select>
+    <button id="depositButton" disabled>Deposit</button>
+  `;
+  popupDiv.appendChild(depositDiv);
+
+  const coinSelect = depositDiv.querySelector(
+    "#coinSelect",
+  ) as HTMLSelectElement;
+  const depositButton = depositDiv.querySelector(
+    "#depositButton",
+  ) as HTMLButtonElement;
+
+  coinSelect.addEventListener("change", (event) => {
+    const selectedCoinId = (event.target as HTMLSelectElement).value;
+    depositButton.disabled = !selectedCoinId;
+  });
+
+  // remove coin from cache and add to wallet
+  depositButton.addEventListener("click", () => {
+    const selectedCoinId = coinSelect.value;
+    if (selectedCoinId) {
+      geocache.coins.push(selectedCoinId);
+      collectedCoins = collectedCoins.filter((coin) => coin !== selectedCoinId);
+      updateWalletUI();
+      updateCachePopupDeposit(cellKey, popupDiv, selectedCoinId);
+      caches[cellKey] = geocache;
+      updateLocalCoins(collectedCoins);
+      updateLocalCaches(caches);
     }
   });
+
+  // display coins to collect
+  geocache.coins.forEach((coinId) => {
+    const coinDiv = document.createElement("div");
+    coinDiv.innerHTML = `
+      <span>Coin ID: ${coinId}</span>
+      <button class="collectButton" data-coin-id="${coinId}">Collect</button>`;
+    popupDiv.appendChild(coinDiv);
+
+    coinDiv.querySelector("button")!.addEventListener("click", (event) => {
+      const coinId = (event.target as HTMLButtonElement).getAttribute(
+        "data-coin-id",
+      );
+      // add coin to wallet and update local storage
+      if (coinId) {
+        collectedCoins.push(coinId);
+        updateWalletUI();
+        updateCachePopupCollect(cellKey, popupDiv);
+        geocache.coins = geocache.coins.filter((id) => id !== coinId);
+        coinDiv.querySelector("button")!.disabled = true;
+        coinDiv.querySelector("button")!.innerHTML = "Collected";
+        caches[cellKey] = geocache;
+        updateLocalCoins(collectedCoins);
+        updateLocalCaches(caches);
+      }
+    });
+  });
+
+  return popupDiv;
+}
+
+function spawnCache(i: number, j: number) {
+  const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1;
+  const coinIds = generateCoinIds(i, j, coinCount);
+  const geocache = new Geocache(i, j, coinIds);
+  const cellKey = `${i},${j}`;
+  caches[cellKey] = geocache;
+
+  const marker = createMarker(i, j);
+  handleMarkerClick(marker, geocache, cellKey);
+}
+
+function spawnExistingCache(cellKey: string, geocache: Geocache) {
+  const [i, j] = cellKey.split(",").map(Number);
+  const marker = createMarker(i, j);
+  handleMarkerClick(marker, geocache, cellKey);
+}
+
+loadGameState();
