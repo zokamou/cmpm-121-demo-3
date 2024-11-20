@@ -93,6 +93,44 @@ leaflet
   })
   .addTo(map);
 
+// location on game startup  -------------------------------------------------
+function initializePlayerLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+
+        playerPosition.i = Math.round(latitude / TILE_DEGREES);
+        playerPosition.j = Math.round(longitude / TILE_DEGREES);
+
+        const startLatLng = leaflet.latLng(latitude, longitude);
+
+        playerMarker.setLatLng(startLatLng);
+        map.setView(startLatLng, GAMEPLAY_ZOOM_LEVEL);
+      },
+      (error) => {
+        console.error("Geolocation failed, using default location:", error);
+
+        const fallbackLatLng = leaflet.latLng(
+          OAKES_CLASSROOM.i * TILE_DEGREES,
+          OAKES_CLASSROOM.j * TILE_DEGREES,
+        );
+        map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
+      },
+    );
+    // go back to oakes if location cannot be found
+  } else {
+    alert("Geolocation is not supported by your browser.");
+    const fallbackLatLng = leaflet.latLng(
+      OAKES_CLASSROOM.i * TILE_DEGREES,
+      OAKES_CLASSROOM.j * TILE_DEGREES,
+    );
+    map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
+  }
+}
+
+initializePlayerLocation();
+
 // create movement buttons --------------------------------------------------------
 const up = document.createElement("button");
 document.body.appendChild(up);
@@ -182,10 +220,79 @@ function movePlayer(deltaI: number, deltaJ: number) {
   });
 }
 
-up.addEventListener("click", () => movePlayer(1, 0));
-down.addEventListener("click", () => movePlayer(-1, 0));
-left.addEventListener("click", () => movePlayer(0, -1));
-right.addEventListener("click", () => movePlayer(0, 1));
+// toggle button to switch between arrors/sensor -------------------------------------------------
+const toggleButton = document.createElement("button");
+toggleButton.id = "toggleButton";
+toggleButton.innerText = "Switch to Sensor Movement";
+toggleButton.style.margin = "10px";
+document.body.appendChild(toggleButton);
+
+let isSensorMode = false;
+let watchId: number | null = null;
+
+function startSensorMode() {
+  if (navigator.geolocation) {
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const newLatLng = leaflet.latLng(latitude, longitude);
+        playerMarker.setLatLng(newLatLng);
+        map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
+        playerPath.addLatLng(newLatLng);
+        playerPosition.i = Math.round(latitude / TILE_DEGREES);
+        playerPosition.j = Math.round(longitude / TILE_DEGREES);
+      },
+      (error) => {
+        console.error("Error accessing geolocation:", error);
+        alert("Could not access geolocation. Please try again.");
+      },
+    );
+    loadGameState;
+  } else {
+    alert("Geolocation is not supported by your browser.");
+  }
+}
+
+function stopSensorMode() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+}
+
+// go back to arrow mode
+toggleButton.addEventListener("click", () => {
+  isSensorMode = !isSensorMode;
+
+  if (isSensorMode) {
+    toggleButton.innerText = "Switch to Arrow Movement";
+    up.disabled = true;
+    down.disabled = true;
+    left.disabled = true;
+    right.disabled = true;
+    startSensorMode();
+  } else {
+    toggleButton.innerText = "Switch to Sensor Movement";
+    up.disabled = false;
+    down.disabled = false;
+    left.disabled = false;
+    right.disabled = false;
+    stopSensorMode();
+  }
+});
+
+up.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(1, 0);
+});
+down.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(-1, 0);
+});
+left.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(0, -1);
+});
+right.addEventListener("click", () => {
+  if (!isSensorMode) movePlayer(0, 1);
+});
 
 // initialization --------------------------------------------------------
 function generateCoinIds(i: number, j: number, numCoins: number): string[] {
