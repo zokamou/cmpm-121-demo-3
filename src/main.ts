@@ -82,6 +82,9 @@ const map = leaflet.map(mapContainer, {
   scrollWheelZoom: false,
 });
 
+const playerPath: leaflet.Polyline = leaflet.polyline([], { color: "blue" })
+  .addTo(map);
+
 leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -111,7 +114,7 @@ right.innerHTML = "➡️";
 
 const resetButton = document.createElement("button");
 resetButton.id = "resetButton";
-resetButton.innerText = "Reset Local Storage";
+resetButton.innerText = "Reset Game State 🚮";
 resetButton.style.margin = "10px";
 
 resetButton.addEventListener("click", () => {
@@ -154,20 +157,19 @@ function movePlayer(deltaI: number, deltaJ: number) {
   playerPosition.i += deltaI;
   playerPosition.j += deltaJ;
 
-  playerMarker.setLatLng([
-    playerPosition.i * TILE_DEGREES,
-    playerPosition.j * TILE_DEGREES,
-  ]);
-
-  const playerLatLng = leaflet.latLng(
+  const newLatLng = leaflet.latLng(
     playerPosition.i * TILE_DEGREES,
     playerPosition.j * TILE_DEGREES,
   );
 
-  // check surrounding cells and only spawn more if they haven't been seen
-  const cellsToCheck = board.getCellsNearPoint(playerLatLng);
+  playerMarker.setLatLng(newLatLng);
 
-  map.setView(playerLatLng, GAMEPLAY_ZOOM_LEVEL);
+  playerPath.addLatLng(newLatLng);
+
+  // check surrounding cells and only spawn more if they haven't been seen
+  const cellsToCheck = board.getCellsNearPoint(newLatLng);
+
+  map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
 
   cellsToCheck.forEach((cell) => {
     const cellKey = `${cell.i},${cell.j}`;
