@@ -180,16 +180,16 @@ function initializePlayerLocation() {
       },
       (error) => {
         console.error("Geolocation failed, using default location:", error);
-
-        const fallbackLatLng = leaflet.latLng(
-          OAKES_CLASSROOM.i * TILE_DEGREES,
-          OAKES_CLASSROOM.j * TILE_DEGREES,
-        );
-        map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
+        if (!usingCurrentLocation) {
+          const fallbackLatLng = leaflet.latLng(
+            OAKES_CLASSROOM.i * TILE_DEGREES,
+            OAKES_CLASSROOM.j * TILE_DEGREES,
+          );
+          map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
+        }
       },
     );
-  } else {
-    loadGameState();
+  } else if (!usingCurrentLocation) {
     const fallbackLatLng = leaflet.latLng(
       OAKES_CLASSROOM.i * TILE_DEGREES,
       OAKES_CLASSROOM.j * TILE_DEGREES,
@@ -200,6 +200,9 @@ function initializePlayerLocation() {
       OAKES_CLASSROOM.j * TILE_DEGREES,
       map,
     );
+    loadGameState();
+  } else {
+    loadGameState();
   }
 }
 
@@ -338,6 +341,7 @@ function loadGameState() {
   const getLocalCoins = localStorage.getItem("coins");
 
   if (getLocalCaches) {
+    console.log("here");
     caches = JSON.parse(getLocalCaches);
     console.log(caches);
     for (const cellKey of Object.keys(caches)) {
@@ -345,6 +349,7 @@ function loadGameState() {
       spawnExistingCache(cellKey, geocacheData);
     }
   } else {
+    console.log("here");
     board.getCellsNearPoint(
       leaflet.latLng(
         player.position.i * TILE_DEGREES,
@@ -726,15 +731,13 @@ useLocationButton.addEventListener("click", () => {
     usingCurrentLocation = true;
     useLocationButton.innerText = "Stop using current location";
     startSensorMode();
-    initializePlayerLocation();
   } else {
-    useLocationButton.innerText = "Use current location";
     usingCurrentLocation = false;
-    stopSensorMode();
+    useLocationButton.innerText = "Use current location";
     initializePlayerLocation();
+    stopSensorMode();
   }
 });
-
 // create wallet --------------------------------------------------------------------
 const walletPanel = document.createElement("div");
 document.body.appendChild(walletPanel);
