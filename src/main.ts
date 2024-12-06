@@ -14,6 +14,7 @@ let caches: { [cacheId: string]: Geocache } = {};
 let collectedCoins: string[] = [];
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 const playerPosition = { i: OAKES_CLASSROOM.i, j: OAKES_CLASSROOM.j };
+let usingCurrentLocation = false;
 
 // Momento Geocache interface --------------------------------------------------------
 interface Momento<T> {
@@ -74,8 +75,11 @@ class Player {
     );
 
     this.marker.setLatLng(newLatLng);
+    this.marker.bindTooltip("You are here!");
     this.path.addLatLng(newLatLng);
     map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
+
+    this.savePositionToLocalStorage();
 
     // Trigger nearby cell checks
     const cellsToCheck = board.getCellsNearPoint(newLatLng);
@@ -102,6 +106,11 @@ class Player {
     this.marker.setLatLng(newLatLng);
     this.path.addLatLng(newLatLng);
     map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
+    this.savePositionToLocalStorage();
+  }
+
+  savePositionToLocalStorage() {
+    localStorage.setItem("playerPosition", JSON.stringify(this.position));
   }
 }
 
@@ -131,7 +140,7 @@ const currentLocation = leaflet.icon({
 
 // location on game startup
 function initializePlayerLocation() {
-  if (navigator.geolocation) {
+  if (navigator.geolocation && usingCurrentLocation) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -149,12 +158,17 @@ function initializePlayerLocation() {
       },
     );
   } else {
-    alert("Geolocation is not supported by your browser.");
+    loadGameState();
     const fallbackLatLng = leaflet.latLng(
       OAKES_CLASSROOM.i * TILE_DEGREES,
       OAKES_CLASSROOM.j * TILE_DEGREES,
     );
     map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
+    player.updateLocationFromSensor(
+      OAKES_CLASSROOM.i * TILE_DEGREES,
+      OAKES_CLASSROOM.j * TILE_DEGREES,
+      map,
+    );
   }
 }
 
@@ -271,8 +285,8 @@ function loadGameState() {
   } else {
     board.getCellsNearPoint(
       leaflet.latLng(
-        playerPosition.i * TILE_DEGREES,
-        playerPosition.j * TILE_DEGREES,
+        player.position.i * TILE_DEGREES,
+        player.position.j * TILE_DEGREES,
       ),
     )
       .forEach((cell) => {
@@ -580,14 +594,6 @@ leaflet
   })
   .addTo(map);
 
-// current location marker
-const playerMarker = leaflet.marker(
-  [playerPosition.i * TILE_DEGREES, playerPosition.j * TILE_DEGREES],
-  { icon: currentLocation },
-);
-playerMarker.bindTooltip("You are here!");
-playerMarker.addTo(map);
-
 // create movement buttons --------------------------------------------------------
 const up = document.createElement("button");
 document.body.appendChild(up);
@@ -647,45 +653,67 @@ document.body.appendChild(recenterButton);
 // toggle button to switch between arrors/sensor -------------------------------------------------
 const toggleButton = document.createElement("button");
 toggleButton.id = "toggleButton";
-toggleButton.innerText = "Switch to Sensor Movement";
+toggleButton.innerText = "Disable arrows";
 toggleButton.style.margin = "10px";
 document.body.appendChild(toggleButton);
 
-let isSensorMode = false;
+let arrowMode = false;
 let watchId: number | null = null;
 
 // go back to arrow mode
 toggleButton.addEventListener("click", () => {
-  isSensorMode = !isSensorMode;
+  arrowMode = !arrowMode;
 
-  if (isSensorMode) {
-    toggleButton.innerText = "Switch to Arrow Movement";
+  if (arrowMode) {
+    toggleButton.innerText = "Toggle Arrows";
     up.disabled = true;
     down.disabled = true;
     left.disabled = true;
     right.disabled = true;
-    startSensorMode();
   } else {
-    toggleButton.innerText = "Switch to Sensor Movement";
+    toggleButton.innerText = "Disable Arrows";
     up.disabled = false;
     down.disabled = false;
     left.disabled = false;
     right.disabled = false;
-    stopSensorMode();
   }
 });
 
 up.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(1, 0);
+  if (!arrowMode) movePlayer(1, 0);
 });
 down.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(-1, 0);
+  if (!arrowMode) movePlayer(-1, 0);
 });
 left.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(0, -1);
+  if (!arrowMode) movePlayer(0, -1);
 });
 right.addEventListener("click", () => {
-  if (!isSensorMode) movePlayer(0, 1);
+  if (!arrowMode) movePlayer(0, 1);
+});
+
+// toggle button to switch using location vs not -------------------------------------------------
+const useLocationButton = document.createElement("button");
+useLocationButton.id = "useLocationButton";
+useLocationButton.innerText = "Use current location";
+useLocationButton.style.margin = "10px";
+document.body.appendChild(useLocationButton);
+let isUsingLocation = false;
+
+// go back to arrow mode
+useLocationButton.addEventListener("click", () => {
+  isUsingLocation = !isUsingLocation;
+  if (isUsingLocation) {
+    usingCurrentLocation = true;
+    useLocationButton.innerText = "Stop using current location";
+    startSensorMode();
+    initializePlayerLocation();
+  } else {
+    useLocationButton.innerText = "Use current location";
+    usingCurrentLocation = false;
+    stopSensorMode();
+    initializePlayerLocation();
+  }
 });
 
 // create wallet --------------------------------------------------------------------
