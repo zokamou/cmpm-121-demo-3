@@ -41,6 +41,70 @@ class Geocache implements Momento<string> {
   }
 }
 
+// player class ----------------------------------------------------------------------
+class Player {
+  position: { i: number; j: number };
+  marker: leaflet.Marker;
+  path: leaflet.Polyline;
+
+  constructor(
+    initialPosition: { i: number; j: number },
+    map: leaflet.Map,
+    markerIcon: leaflet.Icon,
+  ) {
+    this.position = initialPosition;
+
+    const startLatLng = leaflet.latLng(
+      initialPosition.i * TILE_DEGREES,
+      initialPosition.j * TILE_DEGREES,
+    );
+
+    this.marker = leaflet.marker(startLatLng, { icon: markerIcon }).addTo(map);
+    this.path = leaflet.polyline([], { color: "blue" }).addTo(map);
+    map.setView(startLatLng, GAMEPLAY_ZOOM_LEVEL);
+  }
+
+  move(deltaI: number, deltaJ: number, map: leaflet.Map, board: Board) {
+    this.position.i += deltaI;
+    this.position.j += deltaJ;
+
+    const newLatLng = leaflet.latLng(
+      this.position.i * TILE_DEGREES,
+      this.position.j * TILE_DEGREES,
+    );
+
+    this.marker.setLatLng(newLatLng);
+    this.path.addLatLng(newLatLng);
+    map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
+
+    // Trigger nearby cell checks
+    const cellsToCheck = board.getCellsNearPoint(newLatLng);
+    cellsToCheck.forEach((cell) => {
+      const cellKey = `${cell.i},${cell.j}`;
+      if (
+        !caches[cellKey] &&
+        luck(`${cell.i},${cell.j}`) < CACHE_SPAWN_PROBABILITY
+      ) {
+        spawnCache(cell.i, cell.j);
+      }
+    });
+  }
+
+  updateLocationFromSensor(
+    latitude: number,
+    longitude: number,
+    map: leaflet.Map,
+  ) {
+    this.position.i = Math.round(latitude / TILE_DEGREES);
+    this.position.j = Math.round(longitude / TILE_DEGREES);
+
+    const newLatLng = leaflet.latLng(latitude, longitude);
+    this.marker.setLatLng(newLatLng);
+    this.path.addLatLng(newLatLng);
+    map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
+  }
+}
+
 // icons --------------------------------------------------------
 
 const customIcon = leaflet.icon({
@@ -71,14 +135,7 @@ function initializePlayerLocation() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-
-        playerPosition.i = Math.round(latitude / TILE_DEGREES);
-        playerPosition.j = Math.round(longitude / TILE_DEGREES);
-
-        const startLatLng = leaflet.latLng(latitude, longitude);
-
-        playerMarker.setLatLng(startLatLng);
-        map.setView(startLatLng, GAMEPLAY_ZOOM_LEVEL);
+        player.updateLocationFromSensor(latitude, longitude, map);
         loadGameState();
       },
       (error) => {
@@ -91,8 +148,6 @@ function initializePlayerLocation() {
         map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
       },
     );
-
-    // go back to oakes if location cannot be found
   } else {
     alert("Geolocation is not supported by your browser.");
     const fallbackLatLng = leaflet.latLng(
@@ -112,25 +167,24 @@ function updateWalletUI() {
     const li = document.createElement("li");
     li.textContent = coinId;
 
-    // Add "Pan to Cache" button
+    // pan button
     const panButton = document.createElement("button");
     panButton.textContent = "Pan to Cache";
     panButton.style.marginLeft = "10px";
     panButton.addEventListener("click", () => {
-      console.log(`Pan button clicked for coin ${coinId}`); // Debugging log
+      console.log(`Pan button clicked for coin ${coinId}`);
 
-      // Extract grid coordinates from coinId
       const matches = coinId.match(/^coin-([-0-9]+):([-0-9]+)#/);
       if (matches) {
         const cacheI = parseInt(matches[1], 10);
         const cacheJ = parseInt(matches[2], 10);
-        console.log(`Parsed coordinates: i=${cacheI}, j=${cacheJ}`); // Debugging log
+        console.log(`Parsed coordinates: i=${cacheI}, j=${cacheJ}`);
 
         const latLng = leaflet.latLng(
           cacheI * TILE_DEGREES,
           cacheJ * TILE_DEGREES,
         );
-        console.log(`Panning to LatLng: ${latLng}`); // Debugging log
+        console.log(`Panning to LatLng: ${latLng}`);
 
         map.setView(latLng, GAMEPLAY_ZOOM_LEVEL);
       } else {
@@ -147,28 +201,20 @@ function updateWalletUI() {
 
 // move player by arrows or sensor
 function movePlayer(deltaI: number, deltaJ: number) {
-  playerPosition.i += deltaI;
-  playerPosition.j += deltaJ;
+  player.move(deltaI, deltaJ, map, board);
 
   const newLatLng = leaflet.latLng(
-    playerPosition.i * TILE_DEGREES,
-    playerPosition.j * TILE_DEGREES,
+    player.position.i * TILE_DEGREES,
+    player.position.j * TILE_DEGREES,
   );
 
-  playerMarker.setLatLng(newLatLng);
-
-  playerPath.addLatLng(newLatLng);
-
-  // check surrounding cells and only spawn more if they haven't been seen
   const cellsToCheck = board.getCellsNearPoint(newLatLng);
-
-  map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
 
   cellsToCheck.forEach((cell) => {
     const cellKey = `${cell.i},${cell.j}`;
-
     if (
-      !caches[cellKey] && luck(`${cell.i},${cell.j}`) < CACHE_SPAWN_PROBABILITY
+      !caches[cellKey] &&
+      luck(`${cell.i},${cell.j}`) < CACHE_SPAWN_PROBABILITY
     ) {
       spawnCache(cell.i, cell.j);
     }
@@ -181,19 +227,13 @@ function startSensorMode() {
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        const newLatLng = leaflet.latLng(latitude, longitude);
-        playerMarker.setLatLng(newLatLng);
-        map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
-        playerPath.addLatLng(newLatLng);
-        playerPosition.i = Math.round(latitude / TILE_DEGREES);
-        playerPosition.j = Math.round(longitude / TILE_DEGREES);
+        player.updateLocationFromSensor(latitude, longitude, map);
       },
       (error) => {
         console.error("Error accessing geolocation:", error);
         alert("Could not access geolocation. Please try again.");
       },
     );
-    loadGameState;
   } else {
     alert("Geolocation is not supported by your browser.");
   }
@@ -530,8 +570,7 @@ const map = leaflet.map(mapContainer, {
   scrollWheelZoom: false,
 });
 
-const playerPath: leaflet.Polyline = leaflet.polyline([], { color: "blue" })
-  .addTo(map);
+const player = new Player(playerPosition, map, currentLocation);
 
 leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
