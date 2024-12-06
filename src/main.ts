@@ -14,7 +14,6 @@ let caches: { [cacheId: string]: Geocache } = {};
 let collectedCoins: string[] = [];
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 const playerPosition = { i: OAKES_CLASSROOM.i, j: OAKES_CLASSROOM.j };
-let usingCurrentLocation = false;
 
 // Momento Geocache interface --------------------------------------------------------
 interface Momento<T> {
@@ -75,7 +74,6 @@ class Player {
     );
 
     this.marker.setLatLng(newLatLng);
-    this.marker.bindTooltip("You are here!");
     this.path.addLatLng(newLatLng);
     map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
 
@@ -106,6 +104,7 @@ class Player {
     this.marker.setLatLng(newLatLng);
     this.path.addLatLng(newLatLng);
     map.setView(newLatLng, GAMEPLAY_ZOOM_LEVEL);
+
     this.savePositionToLocalStorage();
   }
 
@@ -171,25 +170,27 @@ function removeCoinFromWallet(coinId: string): void {
 // game logic functions -----------------------------------------------------------------------------------------
 // location on game startup
 function initializePlayerLocation() {
-  if (navigator.geolocation && usingCurrentLocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        player.updateLocationFromSensor(latitude, longitude, map);
-        loadGameState();
-      },
-      (error) => {
-        console.error("Geolocation failed, using default location:", error);
-        if (!usingCurrentLocation) {
-          const fallbackLatLng = leaflet.latLng(
-            OAKES_CLASSROOM.i * TILE_DEGREES,
-            OAKES_CLASSROOM.j * TILE_DEGREES,
-          );
-          map.setView(fallbackLatLng, GAMEPLAY_ZOOM_LEVEL);
-        }
-      },
+  // Check if there's a saved position in localStorage
+  const savedPosition = localStorage.getItem("playerPosition");
+  const savedMode = localStorage.getItem("usingCurrentLocation");
+
+  if (savedPosition) {
+    const position = JSON.parse(savedPosition);
+    player.position.i = position.i;
+    player.position.j = position.j;
+
+    const savedLatLng = leaflet.latLng(
+      player.position.i * TILE_DEGREES,
+      player.position.j * TILE_DEGREES,
     );
-  } else if (!usingCurrentLocation) {
+
+    player.marker.setLatLng(savedLatLng);
+    map.setView(savedLatLng, GAMEPLAY_ZOOM_LEVEL);
+    player.path.addLatLng(savedLatLng);
+
+    console.log("Restored player position:", position);
+  } else {
+    // Fallback to default position
     const fallbackLatLng = leaflet.latLng(
       OAKES_CLASSROOM.i * TILE_DEGREES,
       OAKES_CLASSROOM.j * TILE_DEGREES,
@@ -200,10 +201,16 @@ function initializePlayerLocation() {
       OAKES_CLASSROOM.j * TILE_DEGREES,
       map,
     );
-    loadGameState();
-  } else {
-    loadGameState();
   }
+
+  // Restore GPS mode
+  if (savedMode === "true") {
+    isUsingLocation = true;
+    useLocationButton.innerText =
+      "Stop using current location (will take you back to current location on";
+    startSensorMode();
+  }
+  loadGameState();
 }
 
 function createCoinDiv(coinId: string): HTMLDivElement {
@@ -339,9 +346,8 @@ function updateLocalCoins(coinList: string[]) {
 function loadGameState() {
   const getLocalCaches = localStorage.getItem("caches");
   const getLocalCoins = localStorage.getItem("coins");
-
+  console.log(getLocalCaches);
   if (getLocalCaches) {
-    console.log("here");
     caches = JSON.parse(getLocalCaches);
     console.log(caches);
     for (const cellKey of Object.keys(caches)) {
@@ -349,7 +355,7 @@ function loadGameState() {
       spawnExistingCache(cellKey, geocacheData);
     }
   } else {
-    console.log("here");
+    console.log("bnri");
     board.getCellsNearPoint(
       leaflet.latLng(
         player.position.i * TILE_DEGREES,
@@ -728,16 +734,27 @@ let isUsingLocation = false;
 useLocationButton.addEventListener("click", () => {
   isUsingLocation = !isUsingLocation;
   if (isUsingLocation) {
-    usingCurrentLocation = true;
-    useLocationButton.innerText = "Stop using current location";
+    useLocationButton.innerText =
+      "Stop using current location (will take you back to current location on";
     startSensorMode();
+
+    // Save mode to localStorage
+    localStorage.setItem("usingCurrentLocation", "true");
+    loadGameState();
   } else {
-    usingCurrentLocation = false;
     useLocationButton.innerText = "Use current location";
-    initializePlayerLocation();
     stopSensorMode();
+
+    // Save mode to localStorage
+    localStorage.setItem("usingCurrentLocation", "false");
   }
 });
+
+const disclaimer = document.createElement("p");
+document.body.appendChild(disclaimer);
+disclaimer.innerHTML =
+  `Note: Using the current location feature may take a few seconds to work the first time you click the button. `;
+
 // create wallet --------------------------------------------------------------------
 const walletPanel = document.createElement("div");
 document.body.appendChild(walletPanel);
