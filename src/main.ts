@@ -257,7 +257,6 @@ function generateCoinIds(i: number, j: number, numCoins: number): string[] {
   );
 }
 
-// update available coins
 function updateCachePopupCollect(
   cacheId: string,
   popupDiv: HTMLDivElement,
@@ -265,6 +264,7 @@ function updateCachePopupCollect(
   const updatedCoinCount = caches[cacheId.toString()].coins.length;
   popupDiv.querySelector("div")!.innerHTML =
     `<div>Cache #${cacheId} now contains ${updatedCoinCount - 1} coins:</div>`;
+  updateCoinSelectDropdown(popupDiv);
 }
 
 function updateCachePopupDeposit(
@@ -272,14 +272,113 @@ function updateCachePopupDeposit(
   popupDiv: HTMLDivElement,
   selectedCoinId: string,
 ) {
-  console.log("hihi");
+  const updatedCoinCount = caches[cacheId].coins.length;
 
-  const updatedCoinCount = caches[cacheId.toString()].coins.length;
+  // Update the cache header information
   popupDiv.querySelector("div")!.innerHTML =
     `<div>Cache #${cacheId} now contains ${updatedCoinCount} coins:</div>`;
+
+  // Create a new coin div for the deposited coin
   const coinDiv = document.createElement("div");
+  coinDiv.classList.add("coin-item");
   coinDiv.innerHTML = `<span>Coin ID: ${selectedCoinId}</span>`;
+
+  // Create the "Collect" button
+  const collectButton = document.createElement("button");
+  collectButton.textContent = "Collect";
+  collectButton.setAttribute("data-coin-id", selectedCoinId);
+
+  // Add an event listener for the "Collect" button
+  collectButton.addEventListener("click", (event) => {
+    const coinId = (event.target as HTMLButtonElement).getAttribute(
+      "data-coin-id",
+    );
+    if (coinId) {
+      // Add the coin to the wallet
+      collectedCoins.push(coinId);
+
+      // Remove the coin from the cache
+      caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
+        id !== coinId
+      );
+
+      // Save changes to local storage
+      updateLocalCoins(collectedCoins);
+      updateLocalCaches(caches);
+
+      // Update the UI
+      updateWalletUI();
+      updateCachePopupUI(cacheId, popupDiv); // Call a helper to refresh the popup UI
+    }
+  });
+
+  // Append the "Collect" button to the coin div
+  coinDiv.appendChild(collectButton);
+
+  // Append the coin div to the popup
   popupDiv.appendChild(coinDiv);
+
+  // Update the wallet and dropdown UI
+  updateWalletUI();
+  updateCoinSelectDropdown(popupDiv);
+}
+
+function updateCachePopupUI(cacheId: string, popupDiv: HTMLDivElement) {
+  const updatedCoinCount = caches[cacheId].coins.length;
+  popupDiv.querySelector("div")!.innerHTML =
+    `<div>Cache #${cacheId} now contains ${updatedCoinCount} coins:</div>`;
+
+  const coinElements = popupDiv.querySelectorAll(".coin-item");
+  coinElements.forEach((element) => element.remove());
+
+  caches[cacheId].coins.forEach((coinId) => {
+    const coinDiv = document.createElement("div");
+    coinDiv.classList.add("coin-item");
+    coinDiv.innerHTML = `<span>Coin ID: ${coinId}</span>`;
+
+    const collectButton = document.createElement("button");
+    collectButton.textContent = "Collect";
+    collectButton.setAttribute("data-coin-id", coinId);
+
+    collectButton.addEventListener("click", (event) => {
+      const coinId = (event.target as HTMLButtonElement).getAttribute(
+        "data-coin-id",
+      );
+      if (coinId) {
+        collectedCoins.push(coinId);
+        caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
+          id !== coinId
+        );
+        updateLocalCoins(collectedCoins);
+        updateLocalCaches(caches);
+        updateWalletUI();
+        updateCachePopupUI(cacheId, popupDiv);
+      }
+    });
+
+    coinDiv.appendChild(collectButton);
+    popupDiv.appendChild(coinDiv);
+  });
+}
+
+function updateCoinSelectDropdown(popupDiv: HTMLDivElement) {
+  const coinSelect = popupDiv.querySelector("#coinSelect") as HTMLSelectElement;
+
+  coinSelect.innerHTML = `<option value="">-- Select a Coin --</option>`;
+
+  collectedCoins.forEach((coinId) => {
+    const option = document.createElement("option");
+    option.value = coinId;
+    option.textContent = coinId;
+    coinSelect.appendChild(option);
+  });
+
+  const depositButton = popupDiv.querySelector(
+    "#depositButton",
+  ) as HTMLButtonElement;
+  depositButton.disabled = true;
+
+  //coinSelect.value = "";
 }
 
 // spawn caches to the map
@@ -353,7 +452,6 @@ function createCachePopup(geocache: Geocache, cellKey: string): HTMLDivElement {
     depositButton.disabled = !selectedCoinId;
   });
 
-  // remove coin from cache and add to wallet
   depositButton.addEventListener("click", () => {
     const selectedCoinId = coinSelect.value;
     if (selectedCoinId) {
@@ -379,14 +477,14 @@ function createCachePopup(geocache: Geocache, cellKey: string): HTMLDivElement {
       const coinId = (event.target as HTMLButtonElement).getAttribute(
         "data-coin-id",
       );
-      // add coin to wallet and update local storage
+
       if (coinId) {
         collectedCoins.push(coinId);
         updateWalletUI();
         updateCachePopupCollect(cellKey, popupDiv);
         geocache.coins = geocache.coins.filter((id) => id !== coinId);
-        coinDiv.querySelector("button")!.disabled = true;
-        coinDiv.querySelector("button")!.innerHTML = "Collected";
+        coinDiv.remove();
+
         caches[cellKey] = geocache;
         updateLocalCoins(collectedCoins);
         updateLocalCaches(caches);
