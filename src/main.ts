@@ -147,6 +147,12 @@ function addCache(cache: Geocache): void {
   saveCachesToLocalStorage();
 }
 
+function removeCache(cache: Geocache, coinId: string): void {
+  const cacheId = `${cache.i},${cache.j}`;
+
+  caches[cacheId].coins = caches[cacheId].coins.filter((id) => id !== coinId);
+}
+
 function saveCachesToLocalStorage(): void {
   localStorage.setItem("caches", JSON.stringify(caches));
 }
@@ -351,7 +357,10 @@ function updateCachePopupDeposit(
   popupDiv: HTMLDivElement,
   selectedCoinId: string,
 ) {
-  const updatedCoinCount = caches[cacheId].coins.length;
+  const cache = getCache(cacheId);
+  if (!cache) return;
+  const updatedCoinCount = cache.coins.length;
+  addCache(cache);
 
   // Update the cache header information
   popupDiv.querySelector("div")!.innerHTML =
@@ -374,19 +383,14 @@ function updateCachePopupDeposit(
     );
     if (coinId) {
       addCoinToWallet(coinId);
-      caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
-        id !== coinId
-      );
+      removeCache(cache, coinId);
       updateLocalCaches(caches);
       updateWalletUI();
       updateCachePopupUI(cacheId, popupDiv);
     }
   });
 
-  // Append the "Collect" button to the coin div
   coinDiv.appendChild(collectButton);
-
-  // Append the coin div to the popup
   popupDiv.appendChild(coinDiv);
 
   // Update the wallet and dropdown UI
@@ -419,9 +423,7 @@ function updateCachePopupUI(cacheId: string, popupDiv: HTMLDivElement) {
       );
       if (coinId) {
         addCoinToWallet(coinId);
-        caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
-          id !== coinId
-        );
+        removeCache(cache, coinId);
         updateLocalCaches(caches);
         updateWalletUI();
         updateCachePopupUI(cacheId, popupDiv);
