@@ -136,7 +136,22 @@ const currentLocation = leaflet.icon({
   shadowAnchor: [5, 24],
 });
 
-// functions -----------------------------------------------------------------------------------------
+// cache functions -------------------------------------------------------------------------
+function getCache(cacheId: string): Geocache | undefined {
+  return caches[cacheId];
+}
+
+function addCache(cache: Geocache): void {
+  const cacheId = `${cache.i},${cache.j}`;
+  caches[cacheId] = cache;
+  saveCachesToLocalStorage();
+}
+
+function saveCachesToLocalStorage(): void {
+  localStorage.setItem("caches", JSON.stringify(caches));
+}
+
+// game logic functions -----------------------------------------------------------------------------------------
 
 // location on game startup
 function initializePlayerLocation() {
@@ -311,11 +326,11 @@ function generateCoinIds(i: number, j: number, numCoins: number): string[] {
   );
 }
 
-function updateCachePopupCollect(
-  cacheId: string,
-  popupDiv: HTMLDivElement,
-) {
-  const updatedCoinCount = caches[cacheId.toString()].coins.length;
+function updateCachePopupCollect(cacheId: string, popupDiv: HTMLDivElement) {
+  const cache = getCache(cacheId);
+  if (!cache) return;
+
+  const updatedCoinCount = cache.coins.length;
   popupDiv.querySelector("div")!.innerHTML =
     `<div>Cache #${cacheId} now contains ${updatedCoinCount - 1} coins:</div>`;
   updateCoinSelectDropdown(popupDiv);
@@ -348,10 +363,8 @@ function updateCachePopupDeposit(
       "data-coin-id",
     );
     if (coinId) {
-      // Add the coin to the wallet
       collectedCoins.push(coinId);
 
-      // Remove the coin from the cache
       caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
         id !== coinId
       );
@@ -359,8 +372,6 @@ function updateCachePopupDeposit(
       // Save changes to local storage
       updateLocalCoins(collectedCoins);
       updateLocalCaches(caches);
-
-      // Update the UI
       updateWalletUI();
       updateCachePopupUI(cacheId, popupDiv); // Call a helper to refresh the popup UI
     }
@@ -553,10 +564,9 @@ function spawnCache(i: number, j: number) {
   const coinCount = Math.floor(luck([i, j, "coinCount"].toString()) * 5) + 1;
   const coinIds = generateCoinIds(i, j, coinCount);
   const geocache = new Geocache(i, j, coinIds);
-  const cellKey = `${i},${j}`;
-  caches[cellKey] = geocache;
-
+  addCache(geocache);
   const marker = createMarker(i, j);
+  const cellKey = `${i},${j}`;
   handleMarkerClick(marker, geocache, cellKey);
 }
 
