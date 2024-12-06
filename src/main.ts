@@ -151,8 +151,18 @@ function saveCachesToLocalStorage(): void {
   localStorage.setItem("caches", JSON.stringify(caches));
 }
 
-// game logic functions -----------------------------------------------------------------------------------------
+// coin manipulation functions ----------------------------------------------------------------
+function addCoinToWallet(coinId: string): void {
+  collectedCoins.push(coinId);
+  updateLocalCoins(collectedCoins);
+}
 
+function removeCoinFromWallet(coinId: string): void {
+  collectedCoins = collectedCoins.filter((coin) => coin !== coinId);
+  updateLocalCoins(collectedCoins);
+}
+
+// game logic functions -----------------------------------------------------------------------------------------
 // location on game startup
 function initializePlayerLocation() {
   if (navigator.geolocation && usingCurrentLocation) {
@@ -242,7 +252,7 @@ function movePlayer(deltaI: number, deltaJ: number) {
   cellsToCheck.forEach((cell) => {
     const cellKey = `${cell.i},${cell.j}`;
     if (
-      !caches[cellKey] &&
+      !getCache(cellKey) &&
       luck(`${cell.i},${cell.j}`) < CACHE_SPAWN_PROBABILITY
     ) {
       spawnCache(cell.i, cell.j);
@@ -363,17 +373,13 @@ function updateCachePopupDeposit(
       "data-coin-id",
     );
     if (coinId) {
-      collectedCoins.push(coinId);
-
+      addCoinToWallet(coinId);
       caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
         id !== coinId
       );
-
-      // Save changes to local storage
-      updateLocalCoins(collectedCoins);
       updateLocalCaches(caches);
       updateWalletUI();
-      updateCachePopupUI(cacheId, popupDiv); // Call a helper to refresh the popup UI
+      updateCachePopupUI(cacheId, popupDiv);
     }
   });
 
@@ -389,7 +395,9 @@ function updateCachePopupDeposit(
 }
 
 function updateCachePopupUI(cacheId: string, popupDiv: HTMLDivElement) {
-  const updatedCoinCount = caches[cacheId].coins.length;
+  const cache = getCache(cacheId);
+  if (!cache) return;
+  const updatedCoinCount = cache.coins.length;
   popupDiv.querySelector("div")!.innerHTML =
     `<div>Cache #${cacheId} now contains ${updatedCoinCount} coins:</div>`;
 
@@ -410,11 +418,10 @@ function updateCachePopupUI(cacheId: string, popupDiv: HTMLDivElement) {
         "data-coin-id",
       );
       if (coinId) {
-        collectedCoins.push(coinId);
+        addCoinToWallet(coinId);
         caches[cacheId].coins = caches[cacheId].coins.filter((id) =>
           id !== coinId
         );
-        updateLocalCoins(collectedCoins);
         updateLocalCaches(caches);
         updateWalletUI();
         updateCachePopupUI(cacheId, popupDiv);
@@ -521,11 +528,10 @@ function createCachePopup(geocache: Geocache, cellKey: string): HTMLDivElement {
     const selectedCoinId = coinSelect.value;
     if (selectedCoinId) {
       geocache.coins.push(selectedCoinId);
-      collectedCoins = collectedCoins.filter((coin) => coin !== selectedCoinId);
+      removeCoinFromWallet(selectedCoinId);
       updateWalletUI();
       updateCachePopupDeposit(cellKey, popupDiv, selectedCoinId);
       caches[cellKey] = geocache;
-      updateLocalCoins(collectedCoins);
       updateLocalCaches(caches);
     }
   });
@@ -544,14 +550,13 @@ function createCachePopup(geocache: Geocache, cellKey: string): HTMLDivElement {
       );
 
       if (coinId) {
-        collectedCoins.push(coinId);
+        addCoinToWallet(coinId);
         updateWalletUI();
         updateCachePopupCollect(cellKey, popupDiv);
         geocache.coins = geocache.coins.filter((id) => id !== coinId);
         coinDiv.remove();
 
         caches[cellKey] = geocache;
-        updateLocalCoins(collectedCoins);
         updateLocalCaches(caches);
       }
     });
